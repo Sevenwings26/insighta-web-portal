@@ -33,7 +33,7 @@ export default function ExportPage() {
     
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/profiles/export?${params}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/profiles/export?${params}`,
         {
           credentials: "include",
         }

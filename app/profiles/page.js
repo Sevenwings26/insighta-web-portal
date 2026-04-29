@@ -17,20 +17,22 @@ export default function ProfilesPage() {
     total: 0,
     pages: 0,
   });
-  
-  // Filter states
+
   const [filters, setFilters] = useState({
     gender: "",
-    country_id: "",
+    country_id: "",           // ✅ added (was missing from UI)
     age_group: "",
     min_age: "",
     max_age: "",
     min_gender_probability: "",
-    min_country_probability: "",
+    min_country_probability: "", // ✅ added (was missing from UI)
   });
-  
+
+  // ✅ Only allow sort fields the backend accepts
+  const ALLOWED_SORT = ["created_at", "age", "gender_probability"];
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [exporting, setExporting] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -40,24 +42,22 @@ export default function ProfilesPage() {
   const fetchProfiles = async () => {
     setLoading(true);
     try {
-      // Build query params
       const params = new URLSearchParams({
         page: pagination.page,
         limit: pagination.limit,
         sort_by: sortBy,
         order: sortOrder,
       });
-      
-      // Add filters
+
       Object.entries(filters).forEach(([key, value]) => {
         if (value && value !== "") {
           params.append(key, value);
         }
       });
-      
-      const response = await api.get(`/profiles?${params}`);
+
+      const response = await api.get(`/api/profiles?${params}`);
       const data = await response.json();
-      
+
       setProfiles(data.data);
       setPagination(data.pagination);
     } catch (error) {
@@ -69,10 +69,12 @@ export default function ProfilesPage() {
 
   const handleFilterChange = (key, value) => {
     setFilters({ ...filters, [key]: value });
-    setPagination({ ...pagination, page: 1 }); // Reset to first page
+    setPagination({ ...pagination, page: 1 });
   };
 
+  // ✅ Guard: only allow backend-approved sort columns
   const handleSort = (column) => {
+    if (!ALLOWED_SORT.includes(column)) return;
     if (sortBy === column) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -83,13 +85,43 @@ export default function ProfilesPage() {
 
   const handleDelete = async (id) => {
     if (!confirm("Are you sure you want to delete this profile?")) return;
-    
     try {
-      await api.delete(`/profiles/${id}`);
-      fetchProfiles(); // Refresh list
+      await api.delete(`/api/profiles/${id}`);
+      fetchProfiles();
     } catch (error) {
       console.error("Failed to delete profile:", error);
       alert("Failed to delete profile");
+    }
+  };
+
+  // ✅ Export handler — wires up GET /api/profiles/export
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({
+        format: "csv",
+        sort_by: sortBy,
+        order: sortOrder,
+      });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value && value !== "") params.append(key, value);
+      });
+
+      const response = await api.get(`/api/profiles/export?${params}`);
+      if (!response.ok) throw new Error("Export failed");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `profiles_export.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to export profiles");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -106,23 +138,35 @@ export default function ProfilesPage() {
     setPagination({ ...pagination, page: 1 });
   };
 
+  // ✅ Only shows sort arrow for columns the backend actually supports
   const getSortIcon = (column) => {
-    if (sortBy !== column) return "↕️";
-    return sortOrder === "asc" ? "↑" : "↓";
+    if (!ALLOWED_SORT.includes(column)) return null;
+    if (sortBy !== column) return " ↕";
+    return sortOrder === "asc" ? " ↑" : " ↓";
   };
 
   return (
     <ProtectedRoute>
       <div className="flex">
         <Sidebar />
-        
+
         <main className="flex-1 p-8 bg-gray-50 min-h-screen">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Profiles</h1>
-            <p className="text-gray-600 mt-1">Manage and analyze profile data</p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Profiles</h1>
+              <p className="text-gray-600 mt-1">Manage and analyze profile data</p>
+            </div>
+            {/* ✅ Export button */}
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+            >
+              {exporting ? "Exporting..." : "Export CSV"}
+            </button>
           </div>
 
-          {/* Filters Section */}
+          {/* Filters */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <h2 className="text-lg font-semibold mb-4">Filters</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -135,7 +179,7 @@ export default function ProfilesPage() {
                 <option value="male">Male</option>
                 <option value="female">Female</option>
               </select>
-              
+
               <select
                 value={filters.age_group}
                 onChange={(e) => handleFilterChange("age_group", e.target.value)}
@@ -147,7 +191,16 @@ export default function ProfilesPage() {
                 <option value="adult">Adult</option>
                 <option value="senior">Senior</option>
               </select>
-              
+
+              {/* ✅ country_id filter — was missing */}
+              <input
+                type="text"
+                placeholder="Country code (e.g. NG)"
+                value={filters.country_id}
+                onChange={(e) => handleFilterChange("country_id", e.target.value)}
+                className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
               <input
                 type="number"
                 placeholder="Min Age"
@@ -155,7 +208,7 @@ export default function ProfilesPage() {
                 onChange={(e) => handleFilterChange("min_age", e.target.value)}
                 className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              
+
               <input
                 type="number"
                 placeholder="Max Age"
@@ -163,16 +216,30 @@ export default function ProfilesPage() {
                 onChange={(e) => handleFilterChange("max_age", e.target.value)}
                 className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              
+
               <input
                 type="number"
                 step="0.1"
-                placeholder="Min Gender Probability (0-1)"
+                min="0"
+                max="1"
+                placeholder="Min Gender Prob (0–1)"
                 value={filters.min_gender_probability}
                 onChange={(e) => handleFilterChange("min_gender_probability", e.target.value)}
                 className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              
+
+              {/* ✅ min_country_probability filter — was missing */}
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                placeholder="Min Country Prob (0–1)"
+                value={filters.min_country_probability}
+                onChange={(e) => handleFilterChange("min_country_probability", e.target.value)}
+                className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
               <button
                 onClick={clearFilters}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
@@ -182,23 +249,25 @@ export default function ProfilesPage() {
             </div>
           </div>
 
-          {/* Profiles Table */}
+          {/* Table */}
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort("name")}>
-                      Name {getSortIcon("name")}
+                    {/* ✅ Name: not sortable (backend rejects it) — no click handler */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Name
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort("gender")}>
-                      Gender {getSortIcon("gender")}
+                    {/* ✅ Gender: not sortable — no click handler */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Gender
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort("age")}>
-                      Age {getSortIcon("age")}
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort("age")}
+                    >
+                      Age{getSortIcon("age")}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Age Group
@@ -206,9 +275,17 @@ export default function ProfilesPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Country
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort("gender_probability")}>
-                      Probability {getSortIcon("gender_probability")}
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort("gender_probability")}
+                    >
+                      Gender Prob{getSortIcon("gender_probability")}
+                    </th>
+                    <th
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort("created_at")}
+                    >
+                      Created{getSortIcon("created_at")}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -218,13 +295,13 @@ export default function ProfilesPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                         Loading...
                       </td>
                     </tr>
                   ) : profiles.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                         No profiles found
                       </td>
                     </tr>
@@ -235,9 +312,13 @@ export default function ProfilesPage() {
                           {profile.name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            profile.gender === "male" ? "bg-blue-100 text-blue-800" : "bg-pink-100 text-pink-800"
-                          }`}>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              profile.gender === "male"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-pink-100 text-pink-800"
+                            }`}
+                          >
                             {profile.gender}
                           </span>
                         </td>
@@ -252,6 +333,9 @@ export default function ProfilesPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {(profile.gender_probability * 100).toFixed(1)}%
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(profile.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <Link
@@ -281,7 +365,8 @@ export default function ProfilesPage() {
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
                 <div className="text-sm text-gray-700">
                   Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
-                  {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
+                  {pagination.total} results
                 </div>
                 <div className="flex gap-2">
                   <button

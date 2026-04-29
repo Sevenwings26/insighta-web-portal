@@ -20,7 +20,7 @@ export default function ProfileDetailPage() {
 
   const fetchProfile = async () => {
     try {
-      const response = await api.get(`/profiles/${id}`);
+      const response = await api.get(`/api/profiles/${id}`);
       const data = await response.json();
       setProfile(data.data);
     } catch (error) {
@@ -184,3 +184,4 @@ export default function ProfileDetailPage() {
     </ProtectedRoute>
   );
 }
+
