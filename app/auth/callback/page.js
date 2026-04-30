@@ -1,41 +1,40 @@
+// app/auth/callback/page.js
 "use client";
 
 import { useEffect } from "react";
-
-import { useRouter }
-  from "next/navigation";
-
-import { saveTokens }
-  from "@/lib/storage";
+import { useRouter } from "next/navigation";
 
 export default function CallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const params =
-      new URLSearchParams(
-        window.location.search
-      );
+    async function finalizeLogin() {
+      try {
+        // Verify session using cookies
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/users/me`,
+          {
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Version": "1",
+            },
+          }
+        );
 
-    const accessToken =
-      params.get("access_token");
+        if (!response.ok) {
+          router.push("/login");
+          return;
+        }
 
-    const refreshToken =
-      params.get("refresh_token");
-
-    if (
-      accessToken &&
-      refreshToken
-    ) {
-      saveTokens({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-
-      router.push("/dashboard");
-    } else {
-      router.push("/login");
+        router.push("/dashboard");
+      } catch (error) {
+        console.error("Callback auth failed:", error);
+        router.push("/login");
+      }
     }
+
+    finalizeLogin();
   }, [router]);
 
   return (

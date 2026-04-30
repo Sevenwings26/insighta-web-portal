@@ -1,63 +1,119 @@
+
 // context/AuthContext.js
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
 import { useRouter } from "next/navigation";
 
 const AuthContext = createContext();
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({
+  children,
+}) {
+  const [user, setUser] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
   const router = useRouter();
 
-  // Check authentication status on mount
+  // -----------------------------------
+  // Check authentication on app load
+  // -----------------------------------
   useEffect(() => {
     checkAuth();
   }, []);
 
+  // -----------------------------------
+  // Verify session from backend
+  // -----------------------------------
   const checkAuth = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/`, {
-        method: "GET",
-        credentials: "include", // ✅ Send HTTP-only cookies
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/users/me`,
+        {
+          method: "GET",
 
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      } else {
+          // IMPORTANT:
+          // send HttpOnly cookies
+          credentials: "include",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "X-API-Version": "1",
+          },
+        }
+      );
+
+      if (!response.ok) {
         setUser(null);
-        // Don't redirect here - let ProtectedRoute handle it
+        return;
       }
+
+      const userData =
+        await response.json();
+
+      setUser(userData.data);
+
     } catch (error) {
-      console.error("Auth check failed:", error);
+      console.error(
+        "Auth check failed:",
+        error
+      );
+
       setUser(null);
+
     } finally {
       setLoading(false);
     }
   };
 
+  // -----------------------------------
+  // Logout
+  // -----------------------------------
   const logout = async () => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
-        method: "POST",
-        credentials: "include", // ✅ Send cookies to be cleared
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/logout`,
+        {
+          method: "POST",
+
+          credentials: "include",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "X-API-Version": "1",
+          },
+        }
+      );
+
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error(
+        "Logout failed:",
+        error
+      );
+
     } finally {
       setUser(null);
+
       router.push("/login");
     }
   };
 
+  // -----------------------------------
+  // Context value
+  // -----------------------------------
   const value = {
     user,
     loading,
@@ -66,14 +122,28 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={value}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
+// -----------------------------------
+// Hook
+// -----------------------------------
 export function useAuth() {
-  const context = useContext(AuthContext);
+  const context =
+    useContext(AuthContext);
+
   if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
+    throw new Error(
+      "useAuth must be used within AuthProvider"
+    );
   }
+
   return context;
 }
 
