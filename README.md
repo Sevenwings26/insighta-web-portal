@@ -460,7 +460,7 @@ This enables:
 
 ```bash
 # Production .env.local
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+NEXT_PUBLIC_API_URL=https://
 ```
 
 ### 2. **Build the application**
